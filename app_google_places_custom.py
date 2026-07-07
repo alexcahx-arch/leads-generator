@@ -531,6 +531,29 @@ if buscar:
                                 return f"https://wa.me/34{num}"
                             return ""
                         df["whatsapp"] = df["telefono"].apply(make_wa_link)
+                    # --- NUEVO: EXTRACCIÓN DE CP Y CIUDAD ---
+                    if "direccion" in df.columns:
+                        st.write("📍 Separando Códigos Postales y Ciudades...")
+                        cps, ciudades = [], []
+                        for dir_text in df["direccion"]:
+                            if pd.isna(dir_text) or not dir_text:
+                                cps.append("")
+                                ciudades.append("")
+                                continue
+                            
+                            # Expresión regular: busca 5 dígitos exactos y captura el texto hasta la coma
+                            match = re.search(r'\b(\d{5})\s*([^,]+)', str(dir_text))
+                            if match:
+                                cps.append(match.group(1).strip())
+                                ciudades.append(match.group(2).strip())
+                            else:
+                                cps.append("")
+                                ciudades.append("")
+                                
+                        # Añadimos las nuevas columnas al DataFrame
+                        df["cp"] = cps
+                        df["ciudad"] = ciudades
+                    # -----------------------------------------
 
                 st.session_state["last_results"] = df
                 save_search_to_db(fuentes_usadas, query.strip(), provincia.strip(), len(df))
