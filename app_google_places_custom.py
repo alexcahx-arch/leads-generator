@@ -219,14 +219,20 @@ def analyze_website(url: str) -> Dict[str, str]:
 # ------------- GOOGLE PLACES -------------
 V1_BASE = "https://places.googleapis.com/v1"
 
-def v1_text_search(api_key: str, query: str, location: Optional[Tuple[float, float]] = None, radius_m: Optional[int] = None, language: str = "es") -> Dict[str, Any]:
+def v1_text_search(api_key: str, query: str, location: Optional[Tuple[float, float]] = None, radius_m: Optional[int] = None, language: str = "es", page_token: str = None) -> Dict[str, Any]:
     headers = {
         "X-Goog-Api-Key": api_key,
-        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.location,places.googleMapsUri,places.currentOpeningHours,places.regularOpeningHours"
+        # ¡NUEVO!: Añadimos nextPageToken al final del FieldMask para que Google nos dé el ticket
+        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.location,places.googleMapsUri,places.currentOpeningHours,places.regularOpeningHours,nextPageToken"
     }
     body = {"textQuery": query, "languageCode": language}
     if location and radius_m:
         body["locationBias"] = {"circle": {"center": {"latitude": location[0], "longitude": location[1]}, "radius": float(radius_m)}}
+    
+    # ¡NUEVO!: Si tenemos un ticket de la página anterior, lo usamos
+    if page_token:
+        body["pageToken"] = page_token
+        
     r = requests.post(f"{V1_BASE}/places:searchText", headers=headers, json=body, timeout=30)
     r.raise_for_status()
     return r.json()
@@ -238,18 +244,33 @@ def google_run(query: str, provincia: str, idioma: str, radius_km: float = 25.0)
     centro_por_prov = {"madrid": (40.4168, -3.7038), "barcelona": (41.3874, 2.1686), "valencia": (39.4699, -0.3763)}
     center = centro_por_prov.get(provincia.lower(), (40.4168, -3.7038))
 
-    data = v1_text_search(api_key, f"{query} en {provincia}", center, int(radius_km * 1000), idioma or "es")
-
     items = []
-    for p in data.get("places", []):
-        horarios = p.get("currentOpeningHours", {}).get("weekdayDescriptions", []) or p.get("regularOpeningHours", {}).get("weekdayDescriptions", []) or []
-        items.append({
-            "fuente": "Google", "nombre": p.get("displayName", {}).get("text"), "direccion": p.get("formattedAddress"),
-            "telefono": p.get("nationalPhoneNumber"), "web": p.get("websiteUri"), "maps": p.get("googleMapsUri"),
-            "rating": p.get("rating"), "opiniones": p.get("userRatingCount"), "lat": p.get("location", {}).get("latitude"),
-            "lon": p.get("location", {}).get("longitude"), "horarios": " | ".join(horarios) if horarios else "", "correo": ""
-        })
-    return items, {"count": len(items), "raw_count": len(data.get("places", [])), "center": center}
+    page_token = None
+    
+    # ¡NUEVO!: Bucle para pedir hasta 3 páginas (máximo 60 resultados de Google)
+    for pagina in range(3):
+        data = v1_text_search(api_key, f"{query} en {provincia}", center, int(radius_km * 1000), idioma or "es", page_token)
+
+        for p in data.get("places", []):
+            horarios = p.get("currentOpeningHours", {}).get("weekdayDescriptions", []) or p.get("regularOpeningHours", {}).get("weekdayDescriptions", []) or []
+            items.append({
+                "fuente": "Google", "nombre": p.get("displayName", {}).get("text"), "direccion": p.get("formattedAddress"),
+                "telefono": p.get("nationalPhoneNumber"), "web": p.get("websiteUri"), "maps": p.get("googleMapsUri"),
+                "rating": p.get("rating"), "opiniones": p.get("userRatingCount"), "lat": p.get("location", {}).get("latitude"),
+                "lon": p.get("location", {}).get("longitude"), "horarios": " | ".join(horarios) if horarios else "", "correo": ""
+            })
+            
+        # Extraemos el ticket para la siguiente página
+        page_token = data.get("nextPageToken")
+        
+        # Si Google ya no nos da ticket, significa que ya no hay más resultados y rompemos el bucle
+        if not page_token:
+            break
+            
+        # Pequeña pausa obligatoria para que los servidores de Google preparen la siguiente página
+        time.sleep(2)
+
+    return items, {"count": len(items), "center": center}
 
 # ------------- EMPRESITE -------------
 def empresite_search(query: str, provincia: str = "madrid") -> List[Dict[str, Any]]:
