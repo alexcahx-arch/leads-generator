@@ -21,6 +21,7 @@ from PIL import Image
 import streamlit as st
 import plotly.express as px # <-- NUEVA LIBRERÍA DE GRÁFICOS PRO
 import sqlite3 # <-- NUEVO: Para la Caja Fuerte
+import cloudscraper # <-- NUEVO: Traje de camuflaje anti-robots
 from concurrent.futures import ThreadPoolExecutor # <-- NUEVO: Para el Modo Turbo
 from streamlit_lottie import st_lottie # <-- NUEVO: Para las animaciones
 
@@ -77,16 +78,22 @@ st.markdown("""
         border: 1px solid #8b5cf6 !important;
     }
     
-    /* Título principal */
+    /* Título principal con gradiente tipo Fuego */
     .main-header { 
-        background: linear-gradient(135deg, #4F46E5 0%, #EC4899 100%);
+        background: linear-gradient(135deg, #ff4b1f 0%, #ff9068 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-size: 3.5rem !important; 
         font-weight: 900 !important; 
         margin-bottom: 0.5rem;
+        text-align: left;
     }
-    .sub-header { color: #64748b; font-size: 1.2rem; margin-bottom: 2rem; font-weight: 500; }
+    .sub-header { 
+        color: #64748b; 
+        font-size: 1.2rem; 
+        margin-bottom: 2rem;
+        font-weight: 500;
+    }
     
     /* Tarjetas Cristal */
     .metric-card {
@@ -104,15 +111,31 @@ st.markdown("""
     .metric-value { font-size: 2.8rem; font-weight: 900; color: #4F46E5; line-height: 1.1;}
     .metric-label { font-size: 0.85rem; color: #475569; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-top: 10px;}
     
-    /* Botones Neón */
+    /* Botones estilo Fuego */
     div.stButton > button {
-        background: linear-gradient(135deg, #4F46E5, #7C3AED);
-        color: white; border: none; border-radius: 30px; padding: 0.5rem 1rem; font-weight: 800;
-        box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4); transition: all 0.3s ease;
+        background: linear-gradient(135deg, #ff4b1f, #ff9068);
+        color: white;
+        border: none;
+        border-radius: 30px;
+        padding: 0.5rem 1rem;
+        font-weight: 800;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(255, 75, 31, 0.4);
     }
-    div.stButton > button:hover { transform: scale(1.03); box-shadow: 0 6px 20px rgba(124, 58, 237, 0.6); color: white !important; }
-    
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
+    div.stButton > button:hover {
+        transform: scale(1.03);
+        box-shadow: 0 6px 20px rgba(255, 75, 31, 0.6);
+        color: white !important;
+    }
+    /* Estilo especial para el botón del formulario de login */
+    div[data-testid="stFormSubmitButton"] > button {
+        background: linear-gradient(135deg, #ff4b1f, #ff9068);
+        color: white;
+        border-radius: 30px;
+        font-weight: 800;
+        border: none;
+        width: 100%;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -148,19 +171,31 @@ def require_login():
 
     if "auth_ok" not in st.session_state: st.session_state["auth_ok"] = False
     if st.session_state["auth_ok"]: return
+    
+    # Cargamos una animación de fuego espectacular
+    lottie_fire = load_lottieurl("https://assets8.lottiefiles.com/packages/lf20_rwyzwnz6.json")
 
-    col1, col2, col3 = st.columns([1, 1, 1])
+    col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        st.markdown("<br><br><br>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-card'><h3 style='color:#1e293b; font-weight:800;'>🔐 Acceso Privado</h3></div>", unsafe_allow_html=True)
-        pwd = st.text_input("Contraseña de acceso", type="password", label_visibility="collapsed")
-        login = st.button("Entrar al Sistema", use_container_width=True)
-        if login:
-            if pwd == expected:
-                st.session_state["auth_ok"] = True
-                st.rerun()
-            else:
-                st.error("Contraseña incorrecta")
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # Animación encima del login
+        if lottie_fire:
+            st_lottie(lottie_fire, height=180, key="fire_login")
+            
+        st.markdown("<div class='metric-card'><h2 style='color:#ff4b1f; font-weight:900; text-align:center;'>🔥 A FUEGO</h2><p style='text-align:center; color:#64748b;'>Sistema Avanzado de Captación</p></div>", unsafe_allow_html=True)
+        
+        # SOLUCIÓN AL ENTER: Envolver en un st.form
+        with st.form("login_form"):
+            pwd = st.text_input("Contraseña de acceso", type="password", label_visibility="collapsed", placeholder="Introduce la contraseña...")
+            login = st.form_submit_button("Entrar al Sistema")
+            
+            if login:
+                if pwd == expected:
+                    st.session_state["auth_ok"] = True
+                    st.rerun()
+                else:
+                    st.error("❌ Contraseña incorrecta. ¡Inténtalo de nuevo!")
     st.stop()
 
 require_login()
@@ -274,21 +309,16 @@ def google_run(query: str, provincia: str, idioma: str, radius_km: float = 25.0)
 
 # ------------- EMPRESITE -------------
 def empresite_search(query: str, provincia: str = "madrid") -> List[Dict[str, Any]]:
-    # Formateamos los textos reemplazando espacios por guiones (ej: "aire acondicionado" -> "AIRE-ACONDICIONADO")
     q_fmt = query.strip().replace(" ", "-").upper()
     p_fmt = provincia.strip().replace(" ", "-").upper()
-    
     base_url = f"https://empresite.eleconomista.es/Actividad/{q_fmt}/provincia/{p_fmt}/"
-    
-    # Le ponemos un disfraz de navegador real (Chrome) para que no nos bloqueen
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    }
     
     empresas = []
     try:
-        r = requests.get(base_url, headers=headers, timeout=30)
+        # Usamos el camuflaje en lugar del requests normal
+        scraper = cloudscraper.create_scraper()
+        r = scraper.get(base_url, timeout=30)
+        
         if r.status_code == 200:
             soup = BeautifulSoup(r.text, "html.parser")
             cards = soup.select(".resultado, .resultados .info, .listado .info") or soup.find_all("div", class_=lambda x: x and "resultado" in x)
@@ -303,6 +333,8 @@ def empresite_search(query: str, provincia: str = "madrid") -> List[Dict[str, An
                         "rating": np.nan, "opiniones": np.nan, "lat": np.nan, "lon": np.nan, "horarios": "", 
                         "descripcion": desc.get_text(strip=True) if desc else "", "correo": ""
                     })
+        else:
+            st.warning(f"⚠️ Empresite ha bloqueado la conexión (Error {r.status_code}). El escudo anti-robots de su web nos ha frenado.")
     except Exception as e:
         st.error(f"Error de conexión con Empresite: {e}")
         
@@ -310,41 +342,29 @@ def empresite_search(query: str, provincia: str = "madrid") -> List[Dict[str, An
 
 # ------------- PÁGINAS AMARILLAS -------------
 def paginas_amarillas_search(query: str, provincia: str) -> List[Dict[str, Any]]:
-    # Limpiamos el texto para que la URL sea válida
     q_fmt = query.strip().replace(" ", "-").lower()
     p_fmt = provincia.strip().replace(" ", "-").lower()
-    
-    # Estructura de búsqueda de Páginas Amarillas
     url = f"https://www.paginasamarillas.es/search/{q_fmt}/all-ma/{p_fmt}/all-is/{p_fmt}/all-ba/all-pu/all-nc/1"
-    
-    # Nos disfrazamos de navegador real
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-    }
     
     empresas = []
     try:
-        r = requests.get(url, headers=headers, timeout=30)
+        scraper = cloudscraper.create_scraper()
+        r = scraper.get(url, timeout=30)
+        
         if r.status_code == 200:
             soup = BeautifulSoup(r.text, "html.parser")
-            
-            # Buscamos todas las tarjetas de empresas
             cards = soup.find_all("div", class_="listado-item") or soup.find_all("div", class_=lambda x: x and "business" in x.lower())
             
             for card in cards:
-                # Extraemos el nombre
                 nombre_tag = card.find(["h2", "h3", "span"], itemprop="name")
                 nombre = nombre_tag.get_text(strip=True) if nombre_tag else ""
                 
-                # Extraemos el teléfono
                 tel_tag = card.find("span", itemprop="telephone")
                 telefono = tel_tag.get_text(strip=True) if tel_tag else ""
                 
-                # Extraemos la web
                 web_tag = card.find("a", itemprop="url")
                 web = web_tag["href"] if web_tag and web_tag.has_attr("href") else ""
                 
-                # Extraemos la dirección
                 dir_tag = card.find("span", itemprop="streetAddress")
                 direccion = dir_tag.get_text(strip=True) if dir_tag else ""
                 
@@ -354,6 +374,8 @@ def paginas_amarillas_search(query: str, provincia: str) -> List[Dict[str, Any]]
                         "telefono": telefono, "web": web, "maps": "", "rating": np.nan, 
                         "opiniones": np.nan, "lat": np.nan, "lon": np.nan, "horarios": "", "correo": ""
                     })
+        else:
+            st.warning(f"⚠️ Páginas Amarillas ha bloqueado la conexión (Error {r.status_code}). Tienen seguridad alta contra servidores en la nube.")
     except Exception as e:
         st.warning(f"No se pudo raspar Páginas Amarillas: {e}")
         
@@ -433,16 +455,8 @@ with st.sidebar:
     st.markdown("### 🎛️ Configuración de Búsqueda")
     
     with st.expander("📌 Parámetros Básicos", expanded=True):
-        st.markdown("##### 📡 Orígenes de datos")
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            usa_google = st.checkbox("Google Places", value=True)
-            usa_pa = st.checkbox("Páginas Amarillas", value=False)
-        with col_f2:
-            usa_empresite = st.checkbox("Empresite", value=True)
-            usa_colegios = st.checkbox("Colegios (Pronto)", value=False, disabled=True)
         
-        # Opciones rápidas para el jefe
+        # Opciones rápidas para el jefe/técnicos
         tipo_busqueda = st.selectbox("Sector / Gremio", [
             "Administradores de fincas", 
             "Residencias de ancianos", 
@@ -457,7 +471,7 @@ with st.sidebar:
         else:
             query = tipo_busqueda
 
-        # Ubicaciones solicitadas por el jefe
+        # Ubicaciones solicitadas
         tipo_ubicacion = st.selectbox("Ubicación", [
             "Comunidad de Madrid", 
             "Cataluña", 
@@ -474,13 +488,12 @@ with st.sidebar:
     
     with st.expander("⚙️ Ajustes Avanzados", expanded=False):
         idioma = st.selectbox("Idioma", ["es", "ca", "en", "fr", "de"], index=0, help="'ca' es para Catalán")
-        radius = st.slider("Radio (km) – Google", 1, 50, 25, 1)
+        radius = st.slider("Radio (km)", 1, 50, 25, 1)
         extraer_emails = st.toggle("🕵️‍♂️ Sabueso de Emails", value=False, help="Extrae correos de las webs (Tarda más)")
     
     st.markdown("<br>", unsafe_allow_html=True)
     buscar = st.button("🚀 Iniciar Extracción Turbo", type="primary", use_container_width=True)
     
-    # Ponemos la animación justo debajo del botón
     if lottie_search:
         st_lottie(lottie_search, height=150, key="search_anim")
 
@@ -496,29 +509,14 @@ if buscar:
             try:
                 t0 = time.time()
                 
-                st.write("📡 Conectando con las fuentes seleccionadas...")
-                todas_las_filas = []
+                st.write("📡 Conectando con Google Places...")
                 
-               # Ejecutamos los tentáculos seleccionados
-                if usa_google:
-                    st.write("👉 Extrayendo de Google Places...")
-                    rows_g, meta_g = google_run(query, provincia, idioma, radius_km=float(radius))
-                    todas_las_filas.extend(rows_g)
-                    
-                if usa_empresite:
-                    st.write("👉 Extrayendo de Empresite...")
-                    rows_e = empresite_search(query, provincia)
-                    todas_las_filas.extend(rows_e)
-                    
-                if usa_pa:
-                    st.write("👉 Extrayendo de Páginas Amarillas...")
-                    rows_p = paginas_amarillas_search(query, provincia)
-                    todas_las_filas.extend(rows_p)
+                # Ejecutamos SOLO el tentáculo de Google
+                rows_g, meta_g = google_run(query, provincia, idioma, radius_km=float(radius))
                 
-                df = _to_df(todas_las_filas)
+                df = _to_df(rows_g)
+                fuentes_usadas = "Google Places"
                 
-                fuentes_usadas = ", ".join([f for f, used in zip(["Google", "Empresite", "P. Amarillas"], [usa_google, usa_empresite, usa_pa]) if used])
-
                 # ----------------- EJECUCIÓN SABUESO SOCIAL (MODO TURBO) -----------------
                 if extraer_emails and not df.empty:
                     st.write("🕵️‍♂️ [MODO TURBO] Analizando dominios web en paralelo...")
