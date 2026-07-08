@@ -21,7 +21,7 @@ from PIL import Image
 import streamlit as st
 import plotly.express as px # <-- NUEVA LIBRERÍA DE GRÁFICOS PRO
 import sqlite3 # <-- NUEVO: Para la Caja Fuerte
-import cloudscraper # <-- NUEVO: Traje de camuflaje anti-robots
+
 from concurrent.futures import ThreadPoolExecutor # <-- NUEVO: Para el Modo Turbo
 from streamlit_lottie import st_lottie # <-- NUEVO: Para las animaciones
 
@@ -307,79 +307,6 @@ def google_run(query: str, provincia: str, idioma: str, radius_km: float = 25.0)
 
     return items, {"count": len(items), "center": center}
 
-# ------------- EMPRESITE -------------
-def empresite_search(query: str, provincia: str = "madrid") -> List[Dict[str, Any]]:
-    q_fmt = query.strip().replace(" ", "-").upper()
-    p_fmt = provincia.strip().replace(" ", "-").upper()
-    base_url = f"https://empresite.eleconomista.es/Actividad/{q_fmt}/provincia/{p_fmt}/"
-    
-    empresas = []
-    try:
-        # Usamos el camuflaje en lugar del requests normal
-        scraper = cloudscraper.create_scraper()
-        r = scraper.get(base_url, timeout=30)
-        
-        if r.status_code == 200:
-            soup = BeautifulSoup(r.text, "html.parser")
-            cards = soup.select(".resultado, .resultados .info, .listado .info") or soup.find_all("div", class_=lambda x: x and "resultado" in x)
-            for card in cards:
-                h2a = card.select_one("h2 a")
-                desc = card.select_one(".descripcion, .descripcion_empresa, p")
-                nombre = h2a.get_text(strip=True) if h2a else ""
-                url = h2a["href"] if (h2a and h2a.has_attr("href")) else ""
-                if nombre or url:
-                    empresas.append({
-                        "fuente": "Empresite", "nombre": nombre or "N/D", "direccion": "", "telefono": "", "web": url, "maps": "",
-                        "rating": np.nan, "opiniones": np.nan, "lat": np.nan, "lon": np.nan, "horarios": "", 
-                        "descripcion": desc.get_text(strip=True) if desc else "", "correo": ""
-                    })
-        else:
-            st.warning(f"⚠️ Empresite ha bloqueado la conexión (Error {r.status_code}). El escudo anti-robots de su web nos ha frenado.")
-    except Exception as e:
-        st.error(f"Error de conexión con Empresite: {e}")
-        
-    return empresas
-
-# ------------- PÁGINAS AMARILLAS -------------
-def paginas_amarillas_search(query: str, provincia: str) -> List[Dict[str, Any]]:
-    q_fmt = query.strip().replace(" ", "-").lower()
-    p_fmt = provincia.strip().replace(" ", "-").lower()
-    url = f"https://www.paginasamarillas.es/search/{q_fmt}/all-ma/{p_fmt}/all-is/{p_fmt}/all-ba/all-pu/all-nc/1"
-    
-    empresas = []
-    try:
-        scraper = cloudscraper.create_scraper()
-        r = scraper.get(url, timeout=30)
-        
-        if r.status_code == 200:
-            soup = BeautifulSoup(r.text, "html.parser")
-            cards = soup.find_all("div", class_="listado-item") or soup.find_all("div", class_=lambda x: x and "business" in x.lower())
-            
-            for card in cards:
-                nombre_tag = card.find(["h2", "h3", "span"], itemprop="name")
-                nombre = nombre_tag.get_text(strip=True) if nombre_tag else ""
-                
-                tel_tag = card.find("span", itemprop="telephone")
-                telefono = tel_tag.get_text(strip=True) if tel_tag else ""
-                
-                web_tag = card.find("a", itemprop="url")
-                web = web_tag["href"] if web_tag and web_tag.has_attr("href") else ""
-                
-                dir_tag = card.find("span", itemprop="streetAddress")
-                direccion = dir_tag.get_text(strip=True) if dir_tag else ""
-                
-                if nombre:
-                    empresas.append({
-                        "fuente": "P. Amarillas", "nombre": nombre, "direccion": direccion, 
-                        "telefono": telefono, "web": web, "maps": "", "rating": np.nan, 
-                        "opiniones": np.nan, "lat": np.nan, "lon": np.nan, "horarios": "", "correo": ""
-                    })
-        else:
-            st.warning(f"⚠️ Páginas Amarillas ha bloqueado la conexión (Error {r.status_code}). Tienen seguridad alta contra servidores en la nube.")
-    except Exception as e:
-        st.warning(f"No se pudo raspar Páginas Amarillas: {e}")
-        
-    return empresas
 
 # ------------- YELP -------------
 def yelp_search(query: str, provincia: str) -> List[Dict[str, Any]]:
