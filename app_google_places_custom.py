@@ -183,7 +183,7 @@ def load_lottieurl(url: str):
 
 lottie_search = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_bs2nczep.json") # Animación de radar
 
-# ------------- AUTH / LOGIN -------------
+# ------------- AUTH / LOGIN (DISEÑO PREMIUM CON ZENSER) -------------
 def require_login():
     expected = st.secrets.get("AUTH_PASSWORD", os.environ.get("AUTH_PASSWORD", ""))
     if not expected: return  
@@ -191,31 +191,75 @@ def require_login():
     if "auth_ok" not in st.session_state: st.session_state["auth_ok"] = False
     if st.session_state["auth_ok"]: return
     
-    # Cargamos una animación de fuego espectacular
-    lottie_fire = load_lottieurl("https://assets8.lottiefiles.com/packages/lf20_rwyzwnz6.json")
+    # Inyectamos CSS exclusivo para el login
+    st.markdown("""
+    <style>
+        [data-testid="collapsedControl"] { display: none; }
+        .login-wrapper { text-align: center; margin-bottom: 25px; }
+        
+        /* 1. Tarjeta Premium con ACENTO NARANJA y resplandor */
+        [data-testid="stForm"] {
+            background: #FFFFFF;
+            border-radius: 24px !important;
+            padding: 40px 30px !important;
+            border: 1px solid rgba(0,0,0,0.03) !important;
+            border-top: 5px solid #FF4B2B !important; /* 🔥 Acento corporativo superior */
+            box-shadow: 0 20px 40px rgba(255, 75, 43, 0.08) !important; /* Aura Fuego */
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        [data-testid="stForm"]:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 30px 50px rgba(255, 75, 43, 0.15) !important;
+        }
 
-    col1, col2, col3 = st.columns([1, 1.5, 1])
+        /* 2. Efecto para el Logo de Zenser dentro del login */
+        [data-testid="stImage"] {
+            display: flex;
+            justify-content: center;
+            margin-bottom: -10px;
+        }
+        [data-testid="stImage"] img {
+            border-radius: 20px !important;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3) !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    
     with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("<br><br><br>", unsafe_allow_html=True) 
         
-        # Animación encima del login
-        if lottie_fire:
-            st_lottie(lottie_fire, height=180, key="fire_login")
-            
-        st.markdown('<h1 class="main-header">A <span class="fuego-accent">Fuego</span> Lead Generator</h1>', unsafe_allow_html=True)
-        st.markdown('<p class="sub-header">Búsqueda inteligente, captación ultrarrápida. ⚡</p>', unsafe_allow_html=True)
-        
-        # SOLUCIÓN AL ENTER: Envolver en un st.form
         with st.form("login_form"):
-            pwd = st.text_input("Contraseña de acceso", type="password", label_visibility="collapsed", placeholder="Introduce la contraseña...")
-            login = st.form_submit_button("Entrar al Sistema")
+            # Cargamos e inyectamos el logo de Zenser en el centro
+            img_zenser = _safe_load_logo("", "LOGO_ZENSER.png")
+            if img_zenser:
+                c_logo1, c_logo2, c_logo3 = st.columns([1, 1, 1])
+                with c_logo2:
+                    st.image(img_zenser, use_container_width=True)
+            
+            # Textos centrados
+            st.markdown("""
+            <div class="login-wrapper">
+                <h2 style='color: #1D1D1F; font-weight: 800; font-size: 2.2rem; margin-bottom: 0px; letter-spacing: -1.2px; margin-top: 15px;'>
+                    A <span class="fuego-accent">Fuego</span>
+                </h2>
+                <p style='color: #86868B; font-size: 1.05rem; margin-top: 5px;'>Acceso exclusivo al motor de prospección.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            pwd = st.text_input("Contraseña de acceso", type="password", label_visibility="collapsed", placeholder="Introduce tu clave de acceso...")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            login = st.form_submit_button("🚀 ENTRAR AL SISTEMA", type="primary", use_container_width=True)
             
             if login:
                 if pwd == expected:
                     st.session_state["auth_ok"] = True
                     st.rerun()
                 else:
-                    st.error("❌ Contraseña incorrecta. ¡Inténtalo de nuevo!")
+                    st.error("❌ Contraseña incorrecta. Acceso denegado.")
+    
     st.stop()
 
 require_login()
