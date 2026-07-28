@@ -8,3 +8,5 @@ openpyxl
 plotly
 streamlit-lottie
 streamlit-geolocation
+folium
+streamlit-folium
