@@ -24,6 +24,7 @@ import sqlite3 # <-- NUEVO: Para la Caja Fuerte
 
 from concurrent.futures import ThreadPoolExecutor # <-- NUEVO: Para el Modo Turbo
 from streamlit_lottie import st_lottie # <-- NUEVO: Para las animaciones
+from streamlit_geolocation import streamlit_geolocation
 
 # ------------- CONFIG INICIAL -------------
 st.set_page_config(
@@ -33,109 +34,87 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- ESTILOS CSS PERSONALIZADOS (LAVADO DE CARA RADICAL + SIDEBAR PREMIUM) ---
+# ------------- DISEÑO APPLE / TESLA (ULTRA PREMIUM) -------------
+st.set_page_config(page_title="A Fuego Generator", layout="wide", initial_sidebar_state="collapsed")
+
 st.markdown("""
 <style>
-    /* Fondo general moderno (Mesh Gradient) */
-    .stApp {
-        background-color: #f6f8fd;
-        background-image: 
-            radial-gradient(at 80% 0%, hsla(239,83%,86%,0.7) 0px, transparent 50%),
-            radial-gradient(at 0% 50%, hsla(305,74%,88%,0.7) 0px, transparent 50%);
-        color: #1e293b;
-    }
+    /* 1. TIPOGRAFÍA (Inter, simula la fuente 'SF Pro' de Apple) */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
+
+    /* 2. EL SECRETO DEL FONDO (F5F5F7 - El color exacto de fondo de Apple, no quema la vista) */
+    .stApp { background-color: #F5F5F7; }
     
-    /* SIDEBAR PREMIUM OSCURO */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-        border-right: 1px solid rgba(255,255,255,0.05);
+    /* Ocultamos el header y footer por defecto de Streamlit para que parezca una web real */
+    header { visibility: hidden; }
+    footer { visibility: hidden; }
+
+    /* 3. TÍTULO HERO (Centrado, masivo y con confianza) */
+    .hero-container { text-align: center; padding-top: 2rem; padding-bottom: 3rem; }
+    .hero-title { 
+        color: #1D1D1F; 
+        font-size: 4.5rem !important; 
+        font-weight: 800 !important; 
+        letter-spacing: -2px; 
+        margin-bottom: 0.5rem;
     }
-    
-    /* Forzar textos blancos en el sidebar */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span, [data-testid="stSidebar"] h3 {
-        color: #e2e8f0 !important;
+    .hero-subtitle { 
+        color: #86868B; 
+        font-size: 1.3rem; 
+        font-weight: 400; 
+        letter-spacing: -0.3px;
     }
-    
-    /* ARREGLO: Cajas desplegables (Expanders) */
-    [data-testid="stSidebar"] [data-testid="stExpander"] details, 
-    [data-testid="stSidebar"] [data-testid="stExpander"] summary {
-        background-color: rgba(255, 255, 255, 0.05) !important;
-        border-radius: 8px;
-        color: white !important;
-    }
-    
-    /* ARREGLO: Campos de texto y selectores (Inputs) */
-    [data-testid="stSidebar"] input,
-    [data-testid="stSidebar"] div[data-baseweb="select"] > div {
-        background-color: #334155 !important;
-        color: #ffffff !important;
-        border: 1px solid #475569 !important;
-    }
-    
-    /* ARREGLO: Cuando haces clic para escribir (Focus) */
-    [data-testid="stSidebar"] input:focus {
-        background-color: #1e293b !important;
-        border: 1px solid #8b5cf6 !important;
-    }
-    
-    /* Título principal con gradiente tipo Fuego */
-    .main-header { 
-        background: linear-gradient(135deg, #ff4b1f 0%, #ff9068 100%);
+    .fuego-accent {
+        background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-size: 3.5rem !important; 
-        font-weight: 900 !important; 
-        margin-bottom: 0.5rem;
-        text-align: left;
     }
-    .sub-header { 
-        color: #64748b; 
-        font-size: 1.2rem; 
-        margin-bottom: 2rem;
-        font-weight: 500;
-    }
-    
-    /* Tarjetas Cristal */
+
+    /* 4. TARJETAS DE MÉTRICAS FLOTANTES (Blanco puro para destacar sobre el fondo F5F5F7) */
     .metric-card {
-        background: rgba(255, 255, 255, 0.45);
-        backdrop-filter: blur(15px);
-        -webkit-backdrop-filter: blur(15px);
+        background: #FFFFFF;
         border-radius: 20px;
-        padding: 25px;
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.6);
-        text-align: center;
-        transition: transform 0.3s ease;
+        padding: 24px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03); /* Sombra difuminada, estilo Tesla */
+        border: 1px solid rgba(0, 0, 0, 0.02);
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .metric-card:hover { transform: translateY(-8px); }
-    .metric-value { font-size: 2.8rem; font-weight: 900; color: #4F46E5; line-height: 1.1;}
-    .metric-label { font-size: 0.85rem; color: #475569; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-top: 10px;}
-    
-    /* Botones estilo Fuego */
-    div.stButton > button {
-        background: linear-gradient(135deg, #ff4b1f, #ff9068);
+    .metric-card:hover { transform: scale(1.02); }
+
+    /* 5. DISEÑO DE CAJAS DE TEXTO ESTILO iOS (Sin bordes duros) */
+    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div {
+        background-color: #E8E8ED !important; /* Gris ligero para el interior */
+        border-radius: 14px !important;
+        border: 2px solid transparent !important;
+        transition: all 0.2s ease;
+    }
+    div[data-baseweb="select"] > div:hover, div[data-baseweb="input"] > div:hover, div[data-baseweb="select"] > div:focus-within {
+        background-color: #FFFFFF !important;
+        border: 2px solid #FF4B2B !important; /* Brilla al tocarlo */
+    }
+
+    /* 6. EL BOTÓN "TESLA" (Forma de píldora, degradado premium) */
+    div.stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #FF416C, #FF4B2B);
         color: white;
+        border-radius: 40px; /* Forma redonda perfecta en los bordes */
+        padding: 0.8rem 2rem;
+        font-size: 1.15rem;
+        font-weight: 600;
         border: none;
-        border-radius: 30px;
-        padding: 0.5rem 1rem;
-        font-weight: 800;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(255, 75, 31, 0.4);
-    }
-    div.stButton > button:hover {
-        transform: scale(1.03);
-        box-shadow: 0 6px 20px rgba(255, 75, 31, 0.6);
-        color: white !important;
-    }
-    /* Estilo especial para el botón del formulario de login */
-    div[data-testid="stFormSubmitButton"] > button {
-        background: linear-gradient(135deg, #ff4b1f, #ff9068);
-        color: white;
-        border-radius: 30px;
-        font-weight: 800;
-        border: none;
+        box-shadow: 0 8px 20px rgba(255, 75, 43, 0.25);
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         width: 100%;
+        margin-top: 10px;
     }
+    div.stButton > button[kind="primary"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 25px rgba(255, 75, 43, 0.4);
+    }
+    
+    /* 7. REFINAR LA TABLA DE DATOS */
+    [data-testid="stDataFrame"] { border-radius: 16px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -183,7 +162,8 @@ def require_login():
         if lottie_fire:
             st_lottie(lottie_fire, height=180, key="fire_login")
             
-        st.markdown("<div class='metric-card'><h2 style='color:#ff4b1f; font-weight:900; text-align:center;'>🔥 A FUEGO</h2><p style='text-align:center; color:#64748b;'>Sistema Avanzado de Captación</p></div>", unsafe_allow_html=True)
+        st.markdown('<h1 class="main-header">A <span class="fuego-accent">Fuego</span> Lead Generator</h1>', unsafe_allow_html=True)
+        st.markdown('<p class="sub-header">Búsqueda inteligente, captación ultrarrápida. ⚡</p>', unsafe_allow_html=True)
         
         # SOLUCIÓN AL ENTER: Envolver en un st.form
         with st.form("login_form"):
@@ -201,13 +181,9 @@ def require_login():
 require_login()
 
 # ------------- ENCABEZADO MODERNO -------------
-c1, c2 = st.columns([7, 3])
-
-with c1:
-    st.markdown('<p class="main-header">A Fuego Lead Generator</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Búsqueda inteligente, captación ultrarrápida. 🚀</p>', unsafe_allow_html=True)
-
-with c2:
+# ------------- LOGOS (ESQUINA SUPERIOR DERECHA) -------------
+c_vacio, c_logos = st.columns([8, 2])
+with c_logos:
     logo_col1, logo_col2 = st.columns(2)
     with logo_col1:
         img_jelpin = _safe_load_logo(LOGO_JELPIN_B64, "logo_jelpin.png")
@@ -215,6 +191,14 @@ with c2:
     with logo_col2:
         img_multi = _safe_load_logo(LOGO_MULTI_B64, "logo_multi.png")
         if img_multi: st.image(img_multi, width=90)
+
+# ------------- CABECERA HERO (ESTILO APPLE) -------------
+st.markdown("""
+<div class="hero-container">
+    <h1 class="hero-title">A <span class="fuego-accent">Fuego</span> Generator</h1>
+    <p class="hero-subtitle">Inteligencia de prospección. Velocidad sin límites. ⚡</p>
+</div>
+""", unsafe_allow_html=True)
 
 # ------------- AYUDAS GLOBALES -------------
 def get_secret(name: str, default: str = "") -> str:
@@ -377,53 +361,65 @@ init_db() # Arrancamos la base de datos al abrir la app
 
 if "last_results" not in st.session_state: st.session_state["last_results"] = None
 
-# ------------- SIDEBAR (PANEL DE CONTROL) -------------
-with st.sidebar:
-    st.markdown("### 🎛️ Configuración de Búsqueda")
+# ------------- MOTOR DE BÚSQUEDA -------------
+st.markdown("<h4 style='color: #1D1D1F; font-weight: 600; text-align: center; margin-bottom: 30px;'>¿Qué negocio buscas hoy?</h4>", unsafe_allow_html=True)
+
+with st.container():
+    col1, col2 = st.columns(2)
     
-    with st.expander("📌 Parámetros Básicos", expanded=True):
-        
-        # Opciones rápidas para el jefe/técnicos
-        tipo_busqueda = st.selectbox("Sector / Gremio", [
-            "Administradores de fincas", 
-            "Residencias de ancianos", 
-            "Colegios", 
-            "Fontaneros", 
-            "Electricistas", 
-            "✍️ Búsqueda libre..."
+    with col1:
+        tipo_busqueda = st.selectbox("Sector / Gremio objetivo", [
+            "Administradores de fincas", "Residencias de ancianos", "Colegios", 
+            "Fontaneros", "Electricistas", "✍️ Búsqueda libre..."
         ])
-        
         if tipo_busqueda == "✍️ Búsqueda libre...":
             query = st.text_input("Escribe el sector a buscar:", placeholder="Ej: Carpintería metálica...")
         else:
             query = tipo_busqueda
 
-        # Ubicaciones solicitadas
-        tipo_ubicacion = st.selectbox("Ubicación", [
-            "Comunidad de Madrid", 
-            "Cataluña", 
-            "País Vasco", 
-            "Bilbao", 
-            "Lleida", 
-            "🌍 Otra ubicación..."
+    with col2:
+        tipo_ubicacion = st.selectbox("Zona de prospección", [
+            "Comunidad de Madrid", "Cataluña", "País Vasco", "Bilbao", 
+            "Lleida", "📌 Por Código Postal...", "🌍 Otra ubicación..."
         ])
-        
         if tipo_ubicacion == "🌍 Otra ubicación...":
             provincia = st.text_input("Escribe la ciudad o región:", placeholder="Ej: Valencia, Sevilla...")
+        elif tipo_ubicacion == "📌 Por Código Postal...":
+            provincia = st.text_input("Escribe el Código Postal:", placeholder="Ej: 28001...")
         else:
             provincia = tipo_ubicacion
-    
-    with st.expander("⚙️ Ajustes Avanzados", expanded=False):
-        idioma = st.selectbox("Idioma", ["es", "ca", "en", "fr", "de"], index=0, help="'ca' es para Catalán")
-        radius = st.slider("Radio (km)", 1, 50, 25, 1)
-        extraer_emails = st.toggle("🕵️‍♂️ Sabueso de Emails", value=False, help="Extrae correos de las webs (Tarda más)")
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    buscar = st.button("🚀 Iniciar Extracción Turbo", type="primary", use_container_width=True)
-    
-    if lottie_search:
-        st_lottie(lottie_search, height=150, key="search_anim")
 
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # --- LA MAGIA VISUAL: Equilibrio entre GPS y Ajustes ---
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        # Títulos elegantes para darle contexto al botón
+        st.markdown("<p style='color: #1D1D1F; font-weight: 600; margin-bottom: 2px;'>🛰️ Trabajo de Campo (GPS)</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #86868B; font-size: 0.85rem; margin-bottom: 10px;'>Activa tu ubicación para buscar prospectos a tu alrededor.</p>", unsafe_allow_html=True)
+        
+        # TRUCO: Creamos mini-columnas internas. 
+        # Metemos el GPS en una columna diminuta para matar el fondo blanco.
+        gps_btn_col, gps_space_col = st.columns([1, 5])
+        with gps_btn_col:
+            ubicacion_gps = streamlit_geolocation()
+        with gps_space_col:
+            st.empty() # El resto de la pantalla se queda del color gris premium de fondo
+        
+    with col4:
+        st.markdown("<p style='color: #1D1D1F; font-weight: 600; margin-bottom: 2px;'>⚙️ Configuración Adicional</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #86868B; font-size: 0.85rem; margin-bottom: 10px;'>Ajusta los parámetros del motor de búsqueda.</p>", unsafe_allow_html=True)
+        
+        with st.expander("Abrir ajustes avanzados", expanded=False):
+            idioma = st.selectbox("Idioma de los resultados", ["es", "ca", "en"], index=0)
+            radius = st.slider("Radio de búsqueda GPS (km)", 1, 50, 5, 1)
+            extraer_emails = st.toggle("🕵️‍♂️ Forzar Sabueso de Emails", value=False)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    buscar = st.button("🚀 INICIAR EXTRACCIÓN", type="primary", use_container_width=True)
+
+st.markdown("<br><br>", unsafe_allow_html=True)
 # ------------- ACCIÓN -------------
 def _to_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["fuente", "nombre", "direccion", "telefono", "web", "correo", "maps", "rating", "opiniones", "lat", "lon"])
@@ -438,8 +434,36 @@ if buscar:
                 
                 st.write("📡 Conectando con Google Places...")
                 
-                # Ejecutamos SOLO el tentáculo de Google
-                rows_g, meta_g = google_run(query, provincia, idioma, radius_km=float(radius))
+                # --- NUEVO: SEMÁFORO DEL GPS ---
+                # 1. Comprobamos si hay datos en la variable del GPS
+                if ubicacion_gps and ubicacion_gps.get('latitude') and ubicacion_gps.get('longitude'):
+                    st.success("📍 Coordenadas GPS detectadas. Buscando a tu alrededor...")
+                    centro_gps = (ubicacion_gps['latitude'], ubicacion_gps['longitude'])
+                    
+                    api_key = get_secret("GOOGLE_MAPS_API_KEY")
+                    rows_g = []
+                    page_token = None
+                    
+                    # Hacemos la búsqueda directa por coordenadas (hasta 60 resultados)
+                    for pagina in range(3):
+                        data = v1_text_search(api_key, query, location=centro_gps, radius_m=int(float(radius) * 1000), language=idioma, page_token=page_token)
+                        
+                        for p in data.get("places", []):
+                            horarios = p.get("currentOpeningHours", {}).get("weekdayDescriptions", []) or p.get("regularOpeningHours", {}).get("weekdayDescriptions", []) or []
+                            rows_g.append({
+                                "fuente": "Google (GPS)", "nombre": p.get("displayName", {}).get("text"), "direccion": p.get("formattedAddress"),
+                                "telefono": p.get("nationalPhoneNumber"), "web": p.get("websiteUri"), "maps": p.get("googleMapsUri"),
+                                "rating": p.get("rating"), "opiniones": p.get("userRatingCount"), "lat": p.get("location", {}).get("latitude"),
+                                "lon": p.get("location", {}).get("longitude"), "horarios": " | ".join(horarios) if horarios else "", "correo": ""
+                            })
+                        page_token = data.get("nextPageToken")
+                        if not page_token: break
+                        time.sleep(2)
+                        
+                # 2. Si no hay GPS encendido, hace la búsqueda manual de siempre
+                else:
+                    rows_g, meta_g = google_run(query, provincia, idioma, radius_km=float(radius))
+                # -------------------------------
                 
                 df = _to_df(rows_g)
                 fuentes_usadas = "Google Places"
