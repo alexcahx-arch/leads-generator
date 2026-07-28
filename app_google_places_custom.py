@@ -22,9 +22,13 @@ import streamlit as st
 import plotly.express as px # <-- NUEVA LIBRERÍA DE GRÁFICOS PRO
 import sqlite3 # <-- NUEVO: Para la Caja Fuerte
 
+import folium
+from streamlit_folium import st_folium
+
 from concurrent.futures import ThreadPoolExecutor # <-- NUEVO: Para el Modo Turbo
 from streamlit_lottie import st_lottie # <-- NUEVO: Para las animaciones
 from streamlit_geolocation import streamlit_geolocation
+
 
 # ------------- CONFIG INICIAL -------------
 st.set_page_config(
@@ -39,11 +43,10 @@ st.set_page_config(page_title="A Fuego Generator", layout="wide", initial_sideba
 
 st.markdown("""
 <style>
-    /* 1. TIPOGRAFÍA (Inter, simula la fuente 'SF Pro' de Apple) */
+    /* 1. TIPOGRAFÍA Y FONDO MESH GRADIENT */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
+    html, body, [class*="css"] { font-family: 'Inter', -apple-system, sans-serif !important; }
 
-    /* 2. EL SECRETO DEL FONDO: Mesh Gradient (Luces de fuego sutiles en las esquinas) */
     .stApp { 
         background-color: #F5F5F7; 
         background-image: 
@@ -52,75 +55,106 @@ st.markdown("""
         background-attachment: fixed;
     }
     
-    /* Ocultamos el header y footer por defecto de Streamlit para que parezca una web real */
-    header { visibility: hidden; }
-    footer { visibility: hidden; }
+    header { visibility: hidden; } footer { visibility: hidden; }
 
-    /* 3. TÍTULO HERO (Centrado, masivo y con confianza) */
-    .hero-container { text-align: center; padding-top: 2rem; padding-bottom: 3rem; }
-    .hero-title { 
-        color: #1D1D1F; 
-        font-size: 4.5rem !important; 
-        font-weight: 800 !important; 
-        letter-spacing: -2px; 
-        margin-bottom: 0.5rem;
+    /* 2. JERARQUÍA DE TEXTOS (Mejora #3) */
+    .stSelectbox label, .stTextInput label {
+        font-weight: 600 !important;
+        color: #1D1D1F !important;
+        font-size: 1.05rem !important;
+        margin-bottom: 4px;
     }
-    .hero-subtitle { 
-        color: #86868B; 
-        font-size: 1.3rem; 
-        font-weight: 400; 
-        letter-spacing: -0.3px;
-    }
+
+    /* 3. TÍTULO HERO */
+    .hero-container { text-align: center; padding-top: 1rem; padding-bottom: 2.5rem; }
+    .hero-title { color: #1D1D1F; font-size: 4.5rem !important; font-weight: 800 !important; letter-spacing: -2px; margin-bottom: 0.5rem; }
+    .hero-subtitle { color: #86868B; font-size: 1.3rem; font-weight: 400; }
     .fuego-accent {
         background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
 
-    /* 4. TARJETAS DE MÉTRICAS FLOTANTES (Blanco puro para destacar sobre el fondo F5F5F7) */
-    .metric-card {
-        background: #FFFFFF;
-        border-radius: 20px;
-        padding: 24px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03); /* Sombra difuminada, estilo Tesla */
-        border: 1px solid rgba(0, 0, 0, 0.02);
-        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .metric-card:hover { transform: scale(1.02); }
-
-    /* 5. DISEÑO DE CAJAS DE TEXTO ESTILO iOS (Sin bordes duros) */
+    /* 4. CAJAS ESTILO iOS */
     div[data-baseweb="select"] > div, div[data-baseweb="input"] > div {
-        background-color: #E8E8ED !important; /* Gris ligero para el interior */
+        background-color: #E8E8ED !important;
         border-radius: 14px !important;
         border: 2px solid transparent !important;
         transition: all 0.2s ease;
     }
     div[data-baseweb="select"] > div:hover, div[data-baseweb="input"] > div:hover, div[data-baseweb="select"] > div:focus-within {
         background-color: #FFFFFF !important;
-        border: 2px solid #FF4B2B !important; /* Brilla al tocarlo */
+        border: 2px solid #FF4B2B !important; 
     }
 
-    /* 6. EL BOTÓN "TESLA" (Forma de píldora, degradado premium) */
+    /* 5. ACORDEÓN INVISIBLE (Mejora #2) */
+    [data-testid="stExpander"] {
+        border: none !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+    }
+    [data-testid="stExpander"] summary {
+        background-color: #E8E8ED !important;
+        border-radius: 12px;
+        padding: 12px 20px;
+        color: #1D1D1F;
+        font-weight: 600;
+        transition: 0.3s;
+    }
+    [data-testid="stExpander"] summary:hover { background-color: #DFDFE4 !important; }
+
+    /* 6. BOTÓN "A FUEGO" CON GLOW (Mejora #4) */
     div.stButton > button[kind="primary"] {
         background: linear-gradient(135deg, #FF416C, #FF4B2B);
         color: white;
-        border-radius: 40px; /* Forma redonda perfecta en los bordes */
-        padding: 0.8rem 2rem;
-        font-size: 1.15rem;
-        font-weight: 600;
+        border-radius: 40px; 
+        padding: 1rem 2rem;
+        font-size: 1.2rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
         border: none;
         box-shadow: 0 8px 20px rgba(255, 75, 43, 0.25);
         transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         width: 100%;
-        margin-top: 10px;
+        margin-top: 20px;
     }
     div.stButton > button[kind="primary"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 25px rgba(255, 75, 43, 0.4);
+        transform: translateY(-3px) scale(1.01);
+        box-shadow: 0 15px 30px rgba(255, 75, 43, 0.6), 0 0 20px rgba(255, 75, 43, 0.4);
     }
     
-    /* 7. REFINAR LA TABLA DE DATOS */
-    [data-testid="stDataFrame"] { border-radius: 16px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: none !important; }
+    /* 7. ISLA DINÁMICA PARA NOTIFICACIONES (Mejora #5) */
+    [data-testid="stStatusWidget"], [data-testid="stAlert"] {
+        background-color: rgba(29, 29, 31, 0.9) !important;
+        backdrop-filter: blur(10px);
+        color: #FFFFFF !important;
+        border-radius: 30px !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.2) !important;
+        max-width: 600px !important;
+        margin: 20px auto !important;
+        animation: slideDown 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideDown {
+        from { transform: translateY(-20px) scale(0.95); opacity: 0; }
+        to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    /* 8. EFECTO LOGO ZENSER (Estilo App Icon de iOS con resplandor) */
+    [data-testid="stImage"] {
+        display: flex;
+        justify-content: flex-end; /* Lo empuja a la derecha */
+    }
+    [data-testid="stImage"] img {
+        border-radius: 22px !important; /* Convierte el cuadrado en un icono de iPhone */
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important; /* Sombra elegante */
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important; /* Animación fluida */
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    [data-testid="stImage"] img:hover {
+        transform: scale(1.06) translateY(-3px) !important; /* Se levanta al pasar el ratón */
+        box-shadow: 0 15px 35px rgba(255, 75, 43, 0.4) !important; /* Resplandor color Fuego */
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -187,16 +221,14 @@ def require_login():
 require_login()
 
 # ------------- ENCABEZADO MODERNO -------------
-# ------------- LOGOS (ESQUINA SUPERIOR DERECHA) -------------
-c_vacio, c_logos = st.columns([8, 2])
-with c_logos:
-    logo_col1, logo_col2 = st.columns(2)
-    with logo_col1:
-        img_jelpin = _safe_load_logo(LOGO_JELPIN_B64, "logo_jelpin.png")
-        if img_jelpin: st.image(img_jelpin, width=90)
-    with logo_col2:
-        img_multi = _safe_load_logo(LOGO_MULTI_B64, "logo_multi.png")
-        if img_multi: st.image(img_multi, width=90)
+# ------------- LOGO ZENSER (ESQUINA SUPERIOR DERECHA) -------------
+# Dejamos más espacio vacío a la izquierda para que el logo quede bien pegado a la derecha
+c_vacio, c_logo = st.columns([9, 1]) 
+with c_logo:
+    # Leemos directamente el archivo JPG
+    img_zenser = _safe_load_logo("", "LOGO_ZENSER.png")
+    if img_zenser: 
+        st.image(img_zenser, width=85)
 
 # ------------- CABECERA HERO (ESTILO APPLE) -------------
 st.markdown("""
@@ -374,7 +406,7 @@ with st.container():
     col1, col2 = st.columns(2)
     
     with col1:
-        tipo_busqueda = st.selectbox("Sector / Gremio objetivo", [
+        tipo_busqueda = st.selectbox("💼 Sector / Gremio objetivo", [
             "Administradores de fincas", "Residencias de ancianos", "Colegios", 
             "Fontaneros", "Electricistas", "✍️ Búsqueda libre..."
         ])
@@ -384,7 +416,7 @@ with st.container():
             query = tipo_busqueda
 
     with col2:
-        tipo_ubicacion = st.selectbox("Zona de prospección", [
+        tipo_ubicacion = st.selectbox("📍 Zona de prospección", [
             "Comunidad de Madrid", "Cataluña", "País Vasco", "Bilbao", 
             "Lleida", "📌 Por Código Postal...", "🌍 Otra ubicación..."
         ])
@@ -397,35 +429,31 @@ with st.container():
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # --- LA MAGIA VISUAL: Equilibrio entre GPS y Ajustes ---
+    # --- EQUILIBRIO PERFECTO (Mejora #1) ---
     col3, col4 = st.columns(2)
     
     with col3:
-        # Títulos elegantes para darle contexto al botón
-        st.markdown("<p style='color: #1D1D1F; font-weight: 600; margin-bottom: 2px;'>🛰️ Trabajo de Campo (GPS)</p>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #86868B; font-size: 0.85rem; margin-bottom: 10px;'>Activa tu ubicación para buscar prospectos a tu alrededor.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #1D1D1F; font-weight: 600; font-size: 1.1rem; margin-bottom: 2px;'>🛰️ Modo Trabajo de Campo</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #86868B; font-size: 0.9rem; margin-bottom: 10px;'>Radar GPS para barrer negocios a tu alrededor.</p>", unsafe_allow_html=True)
         
-        # TRUCO: Creamos mini-columnas internas. 
-        # Metemos el GPS en una columna diminuta para matar el fondo blanco.
-        gps_btn_col, gps_space_col = st.columns([1, 5])
-        with gps_btn_col:
+        # Enjaulamos el botón para que parezca una píldora compacta
+        c_btn, c_space = st.columns([1.5, 4])
+        with c_btn:
             ubicacion_gps = streamlit_geolocation()
-        with gps_space_col:
-            st.empty() # El resto de la pantalla se queda del color gris premium de fondo
         
     with col4:
-        st.markdown("<p style='color: #1D1D1F; font-weight: 600; margin-bottom: 2px;'>⚙️ Configuración Adicional</p>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #86868B; font-size: 0.85rem; margin-bottom: 10px;'>Ajusta los parámetros del motor de búsqueda.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #1D1D1F; font-weight: 600; font-size: 1.1rem; margin-bottom: 2px;'>⚙️ Parámetros del Motor</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #86868B; font-size: 0.9rem; margin-bottom: 10px;'>Filtros avanzados y Sabueso de extracción.</p>", unsafe_allow_html=True)
         
-        with st.expander("Abrir ajustes avanzados", expanded=False):
+        with st.expander("🛠️ Abrir panel de control", expanded=False):
             idioma = st.selectbox("Idioma de los resultados", ["es", "ca", "en"], index=0)
-            radius = st.slider("Radio de búsqueda GPS (km)", 1, 50, 5, 1)
+            radius = st.slider("Radio de búsqueda (km)", 1, 50, 5, 1)
             extraer_emails = st.toggle("🕵️‍♂️ Forzar Sabueso de Emails", value=False)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    buscar = st.button("🚀 INICIAR EXTRACCIÓN", type="primary", use_container_width=True)
+    buscar = st.button("🚀 INICIAR EXTRACCIÓN A FUEGO", type="primary", use_container_width=True)
 
 st.markdown("<br><br>", unsafe_allow_html=True)
+
 # ------------- ACCIÓN -------------
 def _to_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["fuente", "nombre", "direccion", "telefono", "web", "correo", "maps", "rating", "opiniones", "lat", "lon"])
@@ -596,18 +624,37 @@ if df is not None and not df.empty:
         if "lat" in df_filtrado.columns and "lon" in df_filtrado.columns:
             df_mapa = df_filtrado.dropna(subset=["lat", "lon"])
             if not df_mapa.empty:
-                # Mapa interactivo premium con Plotly
-                fig_map = px.scatter_mapbox(
-                    df_mapa, 
-                    lat="lat", lon="lon", 
-                    hover_name="nombre", 
-                    hover_data={"direccion": True, "telefono": True, "lat": False, "lon": False},
-                    color_discrete_sequence=["#FF4B2B"], 
-                    zoom=13, 
-                    height=500
+                # 1. Calculamos el centro exacto del mapa
+                centro_lat = df_mapa["lat"].mean()
+                centro_lon = df_mapa["lon"].mean()
+                
+                # 2. HACK: Usamos los servidores oficiales de imágenes de Google Maps en ESPAÑOL
+                m = folium.Map(
+                    location=[centro_lat, centro_lon], 
+                    zoom_start=13,
+                    tiles="https://mt1.google.com/vt/lyrs=m&hl=es&x={x}&y={y}&z={z}",
+                    attr="Google Maps"
                 )
-                fig_map.update_layout(mapbox_style="carto-positron", margin={"r":0,"t":0,"l":0,"b":0})
-                st.plotly_chart(fig_map, use_container_width=True)
+                
+                # 3. Colocamos los pines rojos "A Fuego" para cada empresa
+                for idx, row in df_mapa.iterrows():
+                    # Lo que saldrá al hacer clic en el pin
+                    popup_html = f"""
+                    <div style='min-width: 200px; font-family: sans-serif;'>
+                        <b style='color: #1D1D1F; font-size: 14px;'>{row.get('nombre', 'Empresa')}</b><br>
+                        <span style='color: #86868B; font-size: 12px;'>📞 {row.get('telefono', 'Sin teléfono')}</span><br>
+                        <span style='color: #86868B; font-size: 12px;'>⭐ Rating: {row.get('rating', 'N/D')}</span>
+                    </div>
+                    """
+                    folium.Marker(
+                        location=[row["lat"], row["lon"]],
+                        popup=folium.Popup(popup_html, max_width=300),
+                        icon=folium.Icon(color="red", icon="info-sign")
+                    ).add_to(m)
+                
+                # 4. Mostramos el mapa a lo ancho de toda la pantalla
+                st.markdown("<br>", unsafe_allow_html=True)
+                st_folium(m, use_container_width=True, height=500, returned_objects=[])
             else:
                 st.info("📍 No hay coordenadas disponibles para mostrar en el mapa.")
 
