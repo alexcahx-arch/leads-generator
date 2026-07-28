@@ -43,8 +43,14 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
 
-    /* 2. EL SECRETO DEL FONDO (F5F5F7 - El color exacto de fondo de Apple, no quema la vista) */
-    .stApp { background-color: #F5F5F7; }
+    /* 2. EL SECRETO DEL FONDO: Mesh Gradient (Luces de fuego sutiles en las esquinas) */
+    .stApp { 
+        background-color: #F5F5F7; 
+        background-image: 
+            radial-gradient(at 0% 0%, rgba(255, 75, 43, 0.08) 0px, transparent 40%),
+            radial-gradient(at 100% 0%, rgba(255, 65, 108, 0.08) 0px, transparent 40%);
+        background-attachment: fixed;
+    }
     
     /* Ocultamos el header y footer por defecto de Streamlit para que parezca una web real */
     header { visibility: hidden; }
@@ -590,7 +596,18 @@ if df is not None and not df.empty:
         if "lat" in df_filtrado.columns and "lon" in df_filtrado.columns:
             df_mapa = df_filtrado.dropna(subset=["lat", "lon"])
             if not df_mapa.empty:
-                st.map(df_mapa, latitude="lat", longitude="lon", color="#2563EB", size=40)
+                # Mapa interactivo premium con Plotly
+                fig_map = px.scatter_mapbox(
+                    df_mapa, 
+                    lat="lat", lon="lon", 
+                    hover_name="nombre", 
+                    hover_data={"direccion": True, "telefono": True, "lat": False, "lon": False},
+                    color_discrete_sequence=["#FF4B2B"], 
+                    zoom=13, 
+                    height=500
+                )
+                fig_map.update_layout(mapbox_style="carto-positron", margin={"r":0,"t":0,"l":0,"b":0})
+                st.plotly_chart(fig_map, use_container_width=True)
             else:
                 st.info("📍 No hay coordenadas disponibles para mostrar en el mapa.")
 
