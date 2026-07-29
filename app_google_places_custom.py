@@ -123,6 +123,28 @@ st.markdown("""
         transform: translateY(-3px) scale(1.01);
         box-shadow: 0 15px 30px rgba(255, 75, 43, 0.6), 0 0 20px rgba(255, 75, 43, 0.4);
     }
+
+    /* ---> LO NUEVO: BOTÓN EXCEL (BLANCO PREMIUM) <--- */
+    div.stDownloadButton > button {
+        background-color: #FFFFFF; 
+        color: #1D1D1F; 
+        border-radius: 40px; 
+        padding: 1rem 2rem; 
+        font-size: 1.1rem; 
+        font-weight: 700; 
+        text-transform: uppercase; 
+        border: 2px solid #E8E8ED; 
+        box-shadow: 0 8px 20px rgba(0,0,0,0.04); 
+        width: 100%; 
+        margin-top: 20px; 
+        transition: 0.3s;
+    }
+    div.stDownloadButton > button:hover {
+        border-color: #FF4B2B; 
+        color: #FF4B2B; 
+        transform: translateY(-3px) scale(1.01); 
+        box-shadow: 0 15px 30px rgba(255, 75, 43, 0.15);
+    }
     
     /* 7. ISLA DINÁMICA PARA NOTIFICACIONES (Mejora #5) */
     [data-testid="stStatusWidget"], [data-testid="stAlert"] {
@@ -292,27 +314,53 @@ def to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Leads") -> bytes:
         df.to_excel(writer, index=False, sheet_name=sheet_name)
     return output.getvalue()
 
-# ------------- EL SABUESO SOCIAL (EMAILS + REDES) -------------
+# ------------- EL SABUESO SOCIAL NIVEL 2 (DEEP SCRAPE) -------------
 def analyze_website(url: str) -> Dict[str, str]:
-    """Entra en la web y extrae el email y redes sociales principales."""
+    """Entra en la web, extrae el email/redes, y si no hay email, busca la página de contacto."""
     data = {"correo": "", "instagram": "", "linkedin": "", "facebook": ""}
     if not url or pd.isna(url) or not str(url).startswith("http"): return data
+    
+    def extraer_datos_de_html(text, soup):
+        # Buscar emails: Regex mejorada (exige que termine en 2 a 7 letras, no números)
+        emails = set(re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,7}\b", text))
+        
+        # Limpieza extra: quitamos imágenes, archivos y librerías comunes
+        palabras_prohibidas = ('bootstrap', 'jquery', 'sentry', 'plugin')
+        emails_limpios = {
+            e.lower() for e in emails 
+            if not e.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.css', '.js'))
+            and not any(prohibida in e.lower() for prohibida in palabras_prohibidas)
+        }
+        
+        if emails_limpios and not data["correo"]: 
+            data["correo"] = ", ".join(emails_limpios)
+        
+        # Buscar redes sociales
+        for a_tag in soup.find_all('a', href=True):
+            href = a_tag['href'].lower()
+            if "instagram.com" in href and not data["instagram"]: data["instagram"] = a_tag['href']
+            if "linkedin.com" in href and not data["linkedin"]: data["linkedin"] = a_tag['href']
+            if "facebook.com" in href and not data["facebook"]: data["facebook"] = a_tag['href']
+
     try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=3) 
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5) 
         if r.status_code == 200:
-            text = r.text
-            # Buscar emails
-            emails = set(re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", text))
-            emails = {e for e in emails if not e.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.css'))}
-            data["correo"] = ", ".join(emails) if emails else ""
+            soup = BeautifulSoup(r.text, "html.parser")
+            extraer_datos_de_html(r.text, soup)
             
-            # Buscar redes sociales (usamos BeautifulSoup para buscar los links exactos)
-            soup = BeautifulSoup(text, "html.parser")
-            for a_tag in soup.find_all('a', href=True):
-                href = a_tag['href'].lower()
-                if "instagram.com" in href and not data["instagram"]: data["instagram"] = a_tag['href']
-                if "linkedin.com" in href and not data["linkedin"]: data["linkedin"] = a_tag['href']
-                if "facebook.com" in href and not data["facebook"]: data["facebook"] = a_tag['href']
+            # 🔥 DEEP SCRAPE: Si no hay email, buscamos la página de contacto
+            if not data["correo"]:
+                from urllib.parse import urljoin
+                for a_tag in soup.find_all('a', href=True):
+                    href_str = a_tag['href'].lower()
+                    if "contacto" in href_str or "contact" in href_str:
+                        contacto_url = urljoin(url, a_tag['href'])
+                        try:
+                            r2 = requests.get(contacto_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=3)
+                            if r2.status_code == 200:
+                                extraer_datos_de_html(r2.text, BeautifulSoup(r2.text, "html.parser"))
+                        except: pass
+                        break # Solo intentamos el primer enlace de contacto que veamos
     except Exception:
         pass
     return data
@@ -420,26 +468,59 @@ def yelp_search(query: str, provincia: str) -> List[Dict[str, Any]]:
         
     return empresas
 
-# ------------- BASE DE DATOS (CAJA FUERTE) -------------
-def init_db():
-    conn = sqlite3.connect("historial_leads.db")
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS history
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  fecha TEXT, fuente TEXT, query TEXT, provincia TEXT, resultados INTEGER)''')
-    conn.commit()
-    conn.close()
+# ------------- BASE DE DATOS (NUBE SUPABASE + ANTI-DUPLICADOS) -------------
+from supabase import create_client, Client
+import os
+
+@st.cache_resource
+def init_supabase() -> Client:
+    url = st.secrets.get("SUPABASE_URL", os.environ.get("SUPABASE_URL", ""))
+    key = st.secrets.get("SUPABASE_KEY", os.environ.get("SUPABASE_KEY", ""))
+    if url and key:
+        return create_client(url, key)
+    return None
+
+supabase = init_supabase()
 
 def save_search_to_db(fuente, query, provincia, resultados):
-    conn = sqlite3.connect("historial_leads.db")
-    c = conn.cursor()
+    if not supabase: return
     fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
-    c.execute("INSERT INTO history (fecha, fuente, query, provincia, resultados) VALUES (?, ?, ?, ?, ?)",
-              (fecha, fuente, query, provincia, resultados))
-    conn.commit()
-    conn.close()
+    try:
+        supabase.table("afuego_historial").insert({
+            "fecha": fecha, "fuente": fuente, "query": query, "provincia": provincia, "resultados": resultados
+        }).execute()
+    except: pass
 
-init_db() # Arrancamos la base de datos al abrir la app
+def procesar_duplicados(df_leads):
+    """Cruza los leads nuevos con SUPABASE de un solo golpe (optimizado para la nube)."""
+    if df_leads.empty: return df_leads
+    
+    if not supabase:
+        st.error("⚠️ Faltan las credenciales de Supabase. El filtro anti-duplicados no funcionará.")
+        df_leads.insert(0, "Estado", "✅ Nuevo Lead")
+        df_leads.insert(0, "Marcar Contactado", False)
+        return df_leads
+
+    # Obtenemos los nombres que vamos a buscar
+    nombres_buscar = [str(n).strip() for n in df_leads["nombre"]]
+    
+    try:
+        # Buscamos en la nube TODOS los nombres de golpe (mucho más rápido que ir de uno en uno)
+        response = supabase.table("afuego_leads").select("nombre").in_("nombre", nombres_buscar).execute()
+        nombres_existentes = {row["nombre"] for row in response.data}
+    except Exception as e:
+        nombres_existentes = set()
+    
+    estados = []
+    for nombre in df_leads["nombre"]:
+        if str(nombre).strip() in nombres_existentes:
+            estados.append("⚠️ Ya en BBDD")
+        else:
+            estados.append("✅ Nuevo Lead")
+            
+    df_leads.insert(0, "Estado", estados)
+    df_leads.insert(0, "Marcar Contactado", False)
+    return df_leads
 
 if "last_results" not in st.session_state: st.session_state["last_results"] = None
 
@@ -480,10 +561,22 @@ with st.container():
         st.markdown("<p style='color: #1D1D1F; font-weight: 600; font-size: 1.1rem; margin-bottom: 2px;'>🛰️ Modo Trabajo de Campo</p>", unsafe_allow_html=True)
         st.markdown("<p style='color: #86868B; font-size: 0.9rem; margin-bottom: 10px;'>Radar GPS para barrer negocios a tu alrededor.</p>", unsafe_allow_html=True)
         
-        # Enjaulamos el botón para que parezca una píldora compacta
-        c_btn, c_space = st.columns([1.5, 4])
-        with c_btn:
-            ubicacion_gps = streamlit_geolocation()
+        usar_gps = st.toggle("📍 Activar rastreo GPS", value=False)
+        ubicacion_gps = None
+        
+        if usar_gps:
+            # Convertimos la limitación en un mensaje de seguridad premium
+            st.markdown("""
+                <div style="background-color: rgba(255, 75, 43, 0.05); border-left: 3px solid #FF4B2B; padding: 10px 15px; border-radius: 4px; margin-bottom: 15px;">
+                    <span style="color: #1D1D1F; font-size: 0.85rem; font-weight: 500;">
+                        🔒 <b>Privacidad activada:</b> Haz clic en la diana de abajo para autorizar la lectura de tus coordenadas.
+                    </span>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            c_btn, c_space = st.columns([1.5, 4])
+            with c_btn:
+                ubicacion_gps = streamlit_geolocation()
         
     with col4:
         st.markdown("<p style='color: #1D1D1F; font-weight: 600; font-size: 1.1rem; margin-bottom: 2px;'>⚙️ Parámetros del Motor</p>", unsafe_allow_html=True)
@@ -603,6 +696,7 @@ if buscar:
                         df["ciudad"] = ciudades
                     # -----------------------------------------
 
+                df = procesar_duplicados(df)
                 st.session_state["last_results"] = df
                 save_search_to_db(fuentes_usadas, query.strip(), provincia.strip(), len(df))
                 status.update(label=f"✅ ¡Completado! {len(df)} leads en {time.time()-t0:.1f}s", state="complete", expanded=False)
@@ -649,20 +743,48 @@ if df is not None and not df.empty:
         if solo_web and "web" in df_filtrado.columns: df_filtrado = df_filtrado[df_filtrado["web"] != ""]
         if top_rating and "rating" in df_filtrado.columns: df_filtrado = df_filtrado[df_filtrado["rating"] >= 4.0]
 
-        # SORPRESA: Tabla tipo Excel editable sin perder los enlaces
-        st.data_editor(
+        # LA TABLA INTERACTIVA (Guardamos lo que el usuario edite en la variable df_editado)
+        df_editado = st.data_editor(
             df_filtrado, 
             use_container_width=True, 
             height=450,
-            num_rows="dynamic", # Permite añadir o borrar filas
             column_config={
+                "Marcar Contactado": st.column_config.CheckboxColumn(
+                    "📌 ¿Guardar Lead?", 
+                    help="Márcalo si ya lo has contactado para que se guarde en la Base de Datos.",
+                    default=False,
+                ),
                 "web": st.column_config.LinkColumn("Página Web", display_text="Visitar Web 🔗"),
                 "whatsapp": st.column_config.LinkColumn("Chat", display_text="Abrir WhatsApp 💬") if "whatsapp" in df_filtrado.columns else None
             }
         )
         
-        xls = to_excel_bytes(df_filtrado)
-        st.download_button("💾 Exportar a Excel (Filtrado)", data=xls, file_name=f"leads_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
+        # BOTONES DE ACCIÓN LADO A LADO
+        col_btn1, col_btn2 = st.columns(2)
+        
+        with col_btn1:
+            # BOTÓN MÁGICO: Guarda en SUPABASE
+            if st.button("💾 Guardar leads marcados en BBDD", type="primary", use_container_width=True):
+                leads_a_guardar = df_editado[df_editado["Marcar Contactado"] == True]
+                
+                if not supabase:
+                    st.error("❌ Faltan credenciales de Supabase en los Secrets.")
+                elif not leads_a_guardar.empty:
+                    guardados = 0
+                    for nombre in leads_a_guardar["nombre"]:
+                        try:
+                            # Intentamos insertar. Si la columna 'nombre' ya lo tiene (gracias al Is Unique), fallará en silencio.
+                            supabase.table("afuego_leads").insert({"nombre": str(nombre).strip()}).execute()
+                            guardados += 1
+                        except:
+                            pass 
+                    st.success(f"✅ ¡{guardados} leads nuevos blindados en la nube de Supabase!")
+                else:
+                    st.warning("⚠️ No has marcado la casilla de '¿Guardar Lead?' en ninguna fila.")
+
+        with col_btn2:
+            xls = to_excel_bytes(df_filtrado)
+            st.download_button("📊 Exportar a Excel (Filtrado)", data=xls, file_name=f"leads_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
     with tab2:
         if "lat" in df_filtrado.columns and "lon" in df_filtrado.columns:
