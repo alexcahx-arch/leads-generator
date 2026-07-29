@@ -605,60 +605,80 @@ if buscar:
     if not query.strip():
         st.sidebar.error("⚠️ Introduce una palabra clave.")
     else:
-        with st.status("🔄 Procesando solicitud...", expanded=True) as status:
+        with st.status("🔄 Procesando solicitud a Fuego...", expanded=True) as status:
             try:
                 t0 = time.time()
                 
-                st.write("📡 Conectando con Google Places...")
+                # 1. LA BATIDORA MULTIPLICADORA (Se adapta a cualquier gremio)
+                variaciones_busqueda = [
+                    query,                                 # Búsqueda pura
+                    f"Mejores {query}",                    # Variación 1
+                    f"Empresas de {query}",                # Variación 2
+                    f"Servicios de {query}"                # Variación 3
+                ]
                 
-                # --- NUEVO: SEMÁFORO DEL GPS ---
-                # 1. Comprobamos si hay datos en la variable del GPS
-                if ubicacion_gps and ubicacion_gps.get('latitude') and ubicacion_gps.get('longitude'):
-                    st.success("📍 Coordenadas GPS detectadas. Buscando a tu alrededor...")
-                    centro_gps = (ubicacion_gps['latitude'], ubicacion_gps['longitude'])
-                    
-                    api_key = get_secret("GOOGLE_MAPS_API_KEY")
-                    rows_g = []
-                    page_token = None
-                    
-                    # Hacemos la búsqueda directa por coordenadas (hasta 60 resultados)
-                    for pagina in range(3):
-                        data = v1_text_search(api_key, query, location=centro_gps, radius_m=int(float(radius) * 1000), language=idioma, page_token=page_token)
-                        
-                        for p in data.get("places", []):
-                            horarios = p.get("currentOpeningHours", {}).get("weekdayDescriptions", []) or p.get("regularOpeningHours", {}).get("weekdayDescriptions", []) or []
-                            rows_g.append({
-                                "fuente": "Google (GPS)", "nombre": p.get("displayName", {}).get("text"), "direccion": p.get("formattedAddress"),
-                                "telefono": p.get("nationalPhoneNumber"), "web": p.get("websiteUri"), "maps": p.get("googleMapsUri"),
-                                "rating": p.get("rating"), "opiniones": p.get("userRatingCount"), "lat": p.get("location", {}).get("latitude"),
-                                "lon": p.get("location", {}).get("longitude"), "horarios": " | ".join(horarios) if horarios else "", "correo": ""
-                            })
-                        page_token = data.get("nextPageToken")
-                        if not page_token: break
-                        time.sleep(2)
-                        
-                # 2. Si no hay GPS encendido, hace la búsqueda manual de siempre
-                else:
-                    rows_g, meta_g = google_run(query, provincia, idioma, radius_km=float(radius))
-                # -------------------------------
+                todos_los_leads_rows = []
+                nombres_rastreados = set()
                 
-                df = _to_df(rows_g)
-                fuentes_usadas = "Google Places"
+                barra_progreso = st.progress(0)
+                texto_estado = st.empty()
+                
+                api_key = get_secret("GOOGLE_MAPS_API_KEY")
+                
+                # 2. EL BUCLE QUE ENGAÑA A GOOGLE
+                for i, variacion in enumerate(variaciones_busqueda):
+                    texto_estado.markdown(f"**🔍 Rastreando ({i+1}/{len(variaciones_busqueda)}):** *{variacion}*...")
+                    rows_parciales = []
+                    
+                    # --- COMPROBACIÓN GPS ---
+                    if ubicacion_gps and ubicacion_gps.get('latitude') and ubicacion_gps.get('longitude'):
+                        centro_gps = (ubicacion_gps['latitude'], ubicacion_gps['longitude'])
+                        page_token = None
+                        
+                        for pagina in range(3):
+                            data = v1_text_search(api_key, variacion, location=centro_gps, radius_m=int(float(radius) * 1000), language=idioma, page_token=page_token)
+                            
+                            for p in data.get("places", []):
+                                horarios = p.get("currentOpeningHours", {}).get("weekdayDescriptions", []) or p.get("regularOpeningHours", {}).get("weekdayDescriptions", []) or []
+                                rows_parciales.append({
+                                    "fuente": "Google (GPS)", "nombre": p.get("displayName", {}).get("text"), "direccion": p.get("formattedAddress"),
+                                    "telefono": p.get("nationalPhoneNumber"), "web": p.get("websiteUri"), "maps": p.get("googleMapsUri"),
+                                    "rating": p.get("rating"), "opiniones": p.get("userRatingCount"), "lat": p.get("location", {}).get("latitude"),
+                                    "lon": p.get("location", {}).get("longitude"), "horarios": " | ".join(horarios) if horarios else "", "correo": ""
+                                })
+                            page_token = data.get("nextPageToken")
+                            if not page_token: break
+                            time.sleep(2)
+                    
+                    # --- COMPROBACIÓN NORMAL (SIN GPS) ---
+                    else:
+                        rows_parciales, _ = google_run(variacion, provincia, idioma, radius_km=float(radius))
+                    
+                    # 3. FILTRO ANTI-REPETIDOS EN TIEMPO REAL
+                    for lead in rows_parciales:
+                        nombre_limpio = str(lead.get("nombre", "")).strip().lower()
+                        if nombre_limpio not in nombres_rastreados:
+                            nombres_rastreados.add(nombre_limpio)
+                            todos_los_leads_rows.append(lead)
+                            
+                    barra_progreso.progress((i + 1) / len(variaciones_busqueda))
+                
+                texto_estado.empty() # Limpiamos el texto al terminar las batidas
+                
+                # Convertimos todos los resultados únicos en tabla
+                df = _to_df(todos_los_leads_rows)
+                fuentes_usadas = "Google Places (Búsqueda Profunda)"
                 
                 # ----------------- EJECUCIÓN SABUESO SOCIAL (MODO TURBO) -----------------
                 if extraer_emails and not df.empty:
                     st.write("🕵️‍♂️ [MODO TURBO] Analizando dominios web en paralelo...")
-                    
                     webs = df["web"].tolist()
                     resultados_turbo = []
                     
-                    # Dividimos el trabajo: ¡10 webs a la vez en lugar de 1 en 1!
                     with ThreadPoolExecutor(max_workers=10) as executor:
-                        # executor.map mantiene el orden exacto de la tabla
                         for resultado in executor.map(analyze_website, webs):
                             resultados_turbo.append(resultado)
                     
-                    # Rellenamos las columnas con los resultados super rápidos
                     df["correo"] = [r.get("correo", "") for r in resultados_turbo]
                     df["instagram"] = [r.get("instagram", "") for r in resultados_turbo]
                     df["linkedin"] = [r.get("linkedin", "") for r in resultados_turbo]
@@ -678,7 +698,7 @@ if buscar:
                                 return f"https://wa.me/34{num}"
                             return ""
                         df["whatsapp"] = df["telefono"].apply(make_wa_link)
-                    # --- NUEVO: EXTRACCIÓN DE CP Y CIUDAD ---
+                        
                     if "direccion" in df.columns:
                         st.write("📍 Separando Códigos Postales y Ciudades...")
                         cps, ciudades = [], []
@@ -687,8 +707,6 @@ if buscar:
                                 cps.append("")
                                 ciudades.append("")
                                 continue
-                            
-                            # Expresión regular: busca 5 dígitos exactos y captura el texto hasta la coma
                             match = re.search(r'\b(\d{5})\s*([^,]+)', str(dir_text))
                             if match:
                                 cps.append(match.group(1).strip())
@@ -696,16 +714,14 @@ if buscar:
                             else:
                                 cps.append("")
                                 ciudades.append("")
-                                
-                        # Añadimos las nuevas columnas al DataFrame
                         df["cp"] = cps
                         df["ciudad"] = ciudades
-                    # -----------------------------------------
 
+                # Cruzamos con Supabase para marcar los repetidos históricos
                 df = procesar_duplicados(df)
                 st.session_state["last_results"] = df
-                save_search_to_db(fuentes_usadas, query.strip(), provincia.strip(), len(df))
-                status.update(label=f"✅ ¡Completado! {len(df)} leads en {time.time()-t0:.1f}s", state="complete", expanded=False)
+                save_search_to_db(fuentes_usadas, f"{query} (A Fuego)", provincia.strip(), len(df))
+                status.update(label=f"✅ ¡Completado! {len(df)} leads únicos en {time.time()-t0:.1f}s", state="complete", expanded=False)
                     
             except Exception as e:
                 status.update(label="❌ Error crítico", state="error")
