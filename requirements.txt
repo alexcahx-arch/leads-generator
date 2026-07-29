@@ -10,3 +10,4 @@ streamlit-lottie
 streamlit-geolocation
 folium
 streamlit-folium
+supabase
