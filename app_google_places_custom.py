@@ -253,12 +253,18 @@ def require_login():
         st.markdown("<br><br><br>", unsafe_allow_html=True) 
         
         with st.form("login_form"):
-            # Cargamos e inyectamos el logo de Zenser en el centro
-            img_zenser = _safe_load_logo("", "LOGO_ZENSER.png")
-            if img_zenser:
-                c_logo1, c_logo2, c_logo3 = st.columns([1, 1, 1])
-                with c_logo2:
-                    st.image(img_zenser, use_container_width=True)
+            # Cargamos el logo animado en puro HTML para el LOGIN (TAMAÑO MAXIMIZADO)
+            import base64
+            try:
+                with open("zenserflames.webp", "rb") as f:
+                    b64_logo = base64.b64encode(f.read()).decode()
+                    st.markdown(f"""
+                        <div style="display: flex; justify-content: center; margin-bottom: 25px;">
+                            <img src="data:image/webp;base64,{b64_logo}" style="width: 280px; border-radius: 18px; box-shadow: 0 15px 35px rgba(255, 75, 43, 0.4);">
+                        </div>
+                    """, unsafe_allow_html=True)
+            except Exception:
+                pass
             
             # Textos centrados
             st.markdown("""
@@ -291,7 +297,7 @@ require_login()
 # Dejamos más espacio vacío a la izquierda para que el logo quede bien pegado a la derecha
 c_vacio, c_logo = st.columns([9, 1]) 
 with c_logo:
-    # Leemos directamente el archivo JPG
+    # Leemos directamente el archivo WebP
     img_zenser = _safe_load_logo("", "LOGO_ZENSER.png")
     if img_zenser: 
         st.image(img_zenser, width=85)
@@ -763,7 +769,7 @@ if df is not None and not df.empty:
         col_btn1, col_btn2 = st.columns(2)
         
         with col_btn1:
-            # BOTÓN MÁGICO: Guarda en SUPABASE
+            # BOTÓN MÁGICO: Guarda en SUPABASE (Versión con detector de errores)
             if st.button("💾 Guardar leads marcados en BBDD", type="primary", use_container_width=True):
                 leads_a_guardar = df_editado[df_editado["Marcar Contactado"] == True]
                 
@@ -771,14 +777,21 @@ if df is not None and not df.empty:
                     st.error("❌ Faltan credenciales de Supabase en los Secrets.")
                 elif not leads_a_guardar.empty:
                     guardados = 0
+                    errores = [] # Aquí atraparemos al culpable
+                    
                     for nombre in leads_a_guardar["nombre"]:
                         try:
-                            # Intentamos insertar. Si la columna 'nombre' ya lo tiene (gracias al Is Unique), fallará en silencio.
                             supabase.table("afuego_leads").insert({"nombre": str(nombre).strip()}).execute()
                             guardados += 1
-                        except:
-                            pass 
-                    st.success(f"✅ ¡{guardados} leads nuevos blindados en la nube de Supabase!")
+                        except Exception as e:
+                            # Si falla, guardamos el mensaje de error de Supabase
+                            if str(e) not in errores:
+                                errores.append(str(e))
+                                
+                    if guardados > 0:
+                        st.success(f"✅ ¡{guardados} leads nuevos blindados en la nube de Supabase!")
+                    else:
+                        st.error(f"❌ Supabase ha bloqueado el guardado. Motivo del servidor: {errores[0] if errores else 'Desconocido'}")
                 else:
                     st.warning("⚠️ No has marcado la casilla de '¿Guardar Lead?' en ninguna fila.")
 
