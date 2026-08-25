@@ -551,8 +551,12 @@ with st.container():
         
         zonas_predefinidas = st.multiselect(
             "Elige una o varias zonas:", 
-            ["Comunidad de Madrid", "Cataluña", "País Vasco", "Bilbao", "Lleida", "Barcelona", "Valencia", "Sevilla", "Zaragoza"],
-            default=["Comunidad de Madrid"],
+            [
+                "Madrid", "Barcelona", "Valencia", "Sevilla", "Zaragoza", 
+                "Málaga", "Murcia", "Palma de Mallorca", "Las Palmas", 
+                "Bilbao", "Alicante", "Córdoba", "Valladolid", "Vigo", "Lleida"
+            ],
+            default=["Madrid"],
             label_visibility="collapsed"
         )
         
